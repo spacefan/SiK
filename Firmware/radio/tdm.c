@@ -617,6 +617,82 @@ tdm_serial_loop(void)
 		}
              }
 #else // INCLUDE_AES
+
+             // inject rssi packet if requested
+             if (feature_pprzlink_rssi){
+				 // check the ac_id value
+				 if (rx_ac_id == 0) {
+					 __pdata uint8_t i;
+					 for(i=0;i<len-2;i++){
+						 if (pbuf[i]==PPRZ_STX) {
+							 rx_ac_id = pbuf[i+2];
+							 break;
+						 }
+					 }
+				 }
+
+				 // check if there is enough space in the buffer
+				 if ((len+PPRZ_RSSI_LENGTH) < sizeof(pbuf)){
+					 __pdata uint8_t i;
+					 for(i=0;i<len-3;i++){
+						 // check if we have
+						 // PPRZ_STX header
+						 // and PONG_LENGTH
+						 // and PONG_ID
+						 if (pbuf[i]==PPRZ_STX && pbuf[i+1]==PPRZ_PONG_LENGTH && pbuf[i+3]==PPRZ_PONG_ID) {
+							 // we need to send RSSI, lets just add RSSI after PONG - sadly we loose the data that come after
+
+							 // fill in the packet
+							 uint8_t ck_a_tx;
+							 uint8_t ck_b_tx;
+							 ck_a_tx = 0;
+							 ck_b_tx = 0;
+							 i=i+6;
+							 pbuf[i] = PPRZ_STX;
+							 pbuf[i+1] = PPRZ_RSSI_LENGTH;
+							 ck_a_tx += pbuf[i+1];
+							 ck_b_tx += ck_a_tx;
+
+							 pbuf[i+2] = rx_ac_id;
+							 ck_a_tx += pbuf[i+2];
+							 ck_b_tx += ck_a_tx;
+
+							 pbuf[i+3] = PPRZ_RSSI_ID;
+							 ck_a_tx += pbuf[i+3];
+							 ck_b_tx += ck_a_tx;
+
+							 pbuf[i+4] = remote_statistics.average_rssi; // ac rssi
+							 ck_a_tx += pbuf[i+4];
+							 ck_b_tx += ck_a_tx;
+
+							 pbuf[i+5] = settings.transmit_power; // tx power
+							 ck_a_tx += pbuf[i+5];
+							 ck_b_tx += ck_a_tx;
+
+							 pbuf[i+6] = statistics.average_rssi; // gcs rssi
+							 ck_a_tx += pbuf[i+6];
+							 ck_b_tx += ck_a_tx;
+
+							 pbuf[i+7] = statistics.average_noise; // gcs noise
+							 ck_a_tx += pbuf[i+7];
+							 ck_b_tx += ck_a_tx;
+
+							 pbuf[i+8] = remote_statistics.average_noise; // ac noise
+							 ck_a_tx += pbuf[i+8];
+							 ck_b_tx += ck_a_tx;
+
+							 pbuf[i+9] = ck_a_tx;
+							 pbuf[i+10] = ck_b_tx;
+
+							 len = i+PPRZ_RSSI_LENGTH;
+
+							 // break from the loop
+							 break;
+						 }
+					 }
+				 }
+             }
+
              LED_ACTIVITY = LED_ON;
              serial_write_buf(pbuf, len);
              LED_ACTIVITY = LED_OFF;

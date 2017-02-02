@@ -98,6 +98,8 @@ __pdata struct statistics statistics, remote_statistics;
 /// optional features
 bool feature_golay;
 uint8_t feature_mavlink_framing;
+uint8_t feature_pprzlink_rssi;
+uint8_t rx_ac_id;
 bool feature_rtscts;
 
 void
@@ -122,6 +124,10 @@ main(void)
 	feature_mavlink_framing = param_get(PARAM_MAVLINK);
 	feature_golay = param_get(PARAM_ECC)?true:false;
 	feature_rtscts = param_get(PARAM_RTSCTS)?true:false;
+	feature_pprzlink_rssi = param_get(PARAM_PPRZLINK);
+
+	// zero the ac_id just to be sure
+	rx_ac_id = 0;
 
 	// Do hardware initialisation.
 	hardware_init();

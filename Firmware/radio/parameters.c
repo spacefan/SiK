@@ -60,7 +60,7 @@ __code const struct parameter_info {
 	{"NETID",          25},
 	{"TXPOWER",        20},
 	{"ECC",             0},
-	{"MAVLINK",         1},
+	{"MAVLINK",         0},
 	{"OPPRESEND",       0},
 	{"MIN_FREQ",        0},
 	{"MAX_FREQ",        0},
@@ -70,6 +70,7 @@ __code const struct parameter_info {
 	{"MANCHESTER",      0},
 	{"RTSCTS",          0},
 	{"MAX_WINDOW",    131},
+	{"PPRZLINK",	    1},
 #ifdef INCLUDE_AES
 	{"ENCRYPTION_LEVEL", 0}, // no Enycryption (0), 128 or 256 bit key
 #endif
@@ -167,6 +168,11 @@ param_check(__pdata enum ParamID id, __data uint32_t val)
 			return false;
 		break;
 
+	case PARAM_PPRZLINK:
+		if (val >1)
+			return false;
+		break;
+
 	default:
 		// no sanity check for this value
 		break;
@@ -215,6 +221,11 @@ param_set(__data enum ParamID param, __pdata param_t value)
 	case PARAM_RTSCTS:
 		feature_rtscts = value?true:false;
 		value = feature_rtscts?1:0;
+		break;
+
+	case PARAM_PPRZLINK:
+		feature_pprzlink_rssi = (uint8_t) value;
+		value = feature_pprzlink_rssi;
 		break;
 
 	default:

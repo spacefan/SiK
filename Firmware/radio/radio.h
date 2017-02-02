@@ -71,6 +71,8 @@ extern __pdata uint8_t pdata_canary;
 extern bool feature_golay;
 extern bool feature_opportunistic_resend;
 extern uint8_t feature_mavlink_framing;
+extern uint8_t feature_pprzlink_rssi;
+extern uint8_t rx_ac_id;
 extern bool feature_rtscts;
 
 /// System clock frequency
