@@ -74,3 +74,4 @@ extern void packet_inject(__xdata uint8_t *buf, __pdata uint8_t len);
 #define MAVLINK10_STX 254
 #define MAVLINK20_STX 253
 
+#define PPRZ_STX  0x99

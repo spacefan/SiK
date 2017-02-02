@@ -41,6 +41,13 @@
 #include "AES/aes.h"
 #endif
 
+/*
+#define __xdata
+#define __pdata
+#define __bit
+#define __data
+*/
+
 static __bit last_sent_is_resend;
 static __bit last_sent_is_injected;
 static __bit last_recv_is_resend;
@@ -74,17 +81,31 @@ bool seen_mavlink;
 
 #define PACKET_RESEND_THRESHOLD 32
 
+#define PING_LEN 6
+#define PING_ID 8
+
+#define PONG_LEN 6
+#define PONG_ID 3
+
 // check if a buffer looks like a MAVLink heartbeat packet - this
 // is used to determine if we will inject RADIO status MAVLink
 // messages into the serial stream for ground station and aircraft
 // monitoring of link quality
 static void check_heartbeat(__xdata uint8_t * __pdata buf)
 {
+	/*
         if ((buf[1] == 9 && buf[0] == MAVLINK10_STX && buf[5] == 0) ||
             (buf[1] <= 9 && buf[0] == MAVLINK20_STX && buf[7] == 0 && buf[8] == 0 && buf[9] == 0)) {
+        	*/
+	// check PING and PONG messages (equivalent of heartbeat)
+	// buf[0] -> check if PPRZ header
+	// buf[1] -> check lenght
+	// buf[3] -> check MSG_ID
+	if (buf[1]==PING_LEN && buf[0]==PPRZ_STX && buf[3]==PING_ID) {
 		// looks like a MAVLink heartbeat
 		seen_mavlink = true;
 	}
+	//seen_mavlink = true;
 }
 
 #define MSG_TYP_RC_OVERRIDE 70
@@ -109,13 +130,15 @@ uint8_t mavlink_frame(uint8_t max_xmit, __xdata uint8_t * __pdata buf)
 
 	// see if we have more complete MAVLink frames in the serial
 	// buffer that we can fit in this packet
-	while (slen >= 8) {
+	while (slen >= 6) {
 		register uint8_t c = serial_peekx(0);
-                register uint8_t extra_len = 8;
-		if (c != MAVLINK10_STX && c != MAVLINK20_STX) {
+                register uint8_t extra_len = 0;
+		//if (c != MAVLINK10_STX && c != MAVLINK20_STX) {
+       if (c != PPRZ_STX) {
 			// its not a MAVLink packet
 			return last_sent_len;			
 		}
+       /*
                 if (c == MAVLINK20_STX) {
                         extra_len += 4;
                         if (serial_peekx(2) & 1) {
@@ -123,6 +146,7 @@ uint8_t mavlink_frame(uint8_t max_xmit, __xdata uint8_t * __pdata buf)
                                 extra_len += 13;
                         }
                 }
+                */
                 // fetch the length byte
 		c = serial_peekx(1);
 		if (c >= 255 - extra_len || 
@@ -175,6 +199,7 @@ uint8_t encryptReturn(__xdata uint8_t *buf_out, __xdata uint8_t *buf_in, uint8_t
 // return the next packet to be sent
 uint8_t
 packet_get_next(register uint8_t max_xmit, __xdata uint8_t *buf)
+//packet_get_next(register uint8_t max_xmit, uint8_t *buf)
 {
 	register uint16_t slen;
 
@@ -189,6 +214,8 @@ packet_get_next(register uint8_t max_xmit, __xdata uint8_t *buf)
   }
 #endif // INCLUDE_AES
   
+
+
 	if (injected_packet) {
 		// send a previously injected packet
 		slen = last_sent_len;
@@ -214,9 +241,12 @@ packet_get_next(register uint8_t max_xmit, __xdata uint8_t *buf)
 		return encryptReturn(buf, last_sent, last_sent_len);
 	}
 
+
 	last_sent_is_injected = false;
 
 	slen = serial_read_available();
+
+
 	if (force_resend) {
 		if (max_xmit < last_sent_len) {
 			return 0;
@@ -225,7 +255,6 @@ packet_get_next(register uint8_t max_xmit, __xdata uint8_t *buf)
 		force_resend = false;
 		return encryptReturn(buf, last_sent, last_sent_len);
 	}
-
 	last_sent_is_resend = false;
 
 	// if we have received something via serial see how
@@ -241,6 +270,8 @@ packet_get_next(register uint8_t max_xmit, __xdata uint8_t *buf)
 		return 0;
 	}
 
+
+
 	if (!feature_mavlink_framing) {
 		// simple framing
 		if (slen > 0 && serial_read_buf(buf, slen)) {
@@ -249,6 +280,7 @@ packet_get_next(register uint8_t max_xmit, __xdata uint8_t *buf)
 		}
     return 0;
 	}
+
 
 	// try to align packet boundaries with MAVLink packets
 
@@ -292,9 +324,9 @@ packet_get_next(register uint8_t max_xmit, __xdata uint8_t *buf)
 		// We are now looking for a new packet (mav_pkt_len == 0)
 	while (slen > 0) {
 		register uint8_t c = serial_peekx(0);
-		if (c == MAVLINK10_STX || c == MAVLINK20_STX) {
+		if (c == PPRZ_STX) {
 			if (slen == 1) {
-				// we got a bare MAVLink header byte
+				// we got a bare PPRZ header byte
 				if (last_sent_len == 0) {
 					// wait for the next byte to
 					// give us the length
@@ -306,8 +338,9 @@ packet_get_next(register uint8_t max_xmit, __xdata uint8_t *buf)
 				break;
 			}
 			mav_pkt_len = serial_peekx(1);
-			if (mav_pkt_len >= 255-(8+4+13) ||
-			    mav_pkt_len+(8+4+13) > mav_max_xmit) {
+
+
+			if (mav_pkt_len > mav_max_xmit) {
 				// its too big for us to cope with
 				mav_pkt_len = 0;
 				last_sent[last_sent_len++] = serial_read(); // Send the STX and try again (we will lose framing)
@@ -315,8 +348,10 @@ packet_get_next(register uint8_t max_xmit, __xdata uint8_t *buf)
 				continue;
 			}
 
+
 			// the length byte doesn't include
 			// the header or CRC
+			/* Actually the length has everything
 			mav_pkt_len += 8;
                         if (c == MAVLINK20_STX) {
                                 mav_pkt_len += 4;
@@ -325,6 +360,7 @@ packet_get_next(register uint8_t max_xmit, __xdata uint8_t *buf)
                                         mav_pkt_len += 13;
                                 }
                         }
+                        */
 			
 			if (last_sent_len != 0) {
 				// send what we've got so far,

@@ -617,6 +617,18 @@ tdm_serial_loop(void)
 		}
              }
 #else // INCLUDE_AES
+
+             // check the ac_id value
+             if (feature_mavlink_framing && settings.rx_ac_id == 0) {
+            	 __pdata uint8_t i;
+            	 for(i=0;i<len-2;i++){
+            		 if (pbuf[i]==PPRZ_STX) {
+            			 settings.rx_ac_id = pbuf[i+2];
+            			 break;
+            		 }
+            	 }
+             }
+
              LED_ACTIVITY = LED_ON;
              serial_write_buf(pbuf, len);
              LED_ACTIVITY = LED_OFF;

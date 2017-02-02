@@ -877,7 +877,8 @@ radio_configure(__pdata uint8_t air_rate)
 				       reg_table_915[i][rate_selection]);
 		}
 	}
-
+	// set original ac_id to zero
+	settings.rx_ac_id = 0;
 	return true;
 }
 

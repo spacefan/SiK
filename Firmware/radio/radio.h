@@ -281,6 +281,7 @@ struct radio_settings {
 	uint8_t current_channel;
 	uint8_t transmit_power;
 	uint8_t preamble_length; // in nibbles
+	uint8_t rx_ac_id;
 };
 
 extern __pdata struct radio_settings settings;

@@ -109,31 +109,101 @@ struct mavlink_RADIO_v10 {
 	uint8_t remnoise;
 };
 
+// Start byte
+
+#define PPRZ_RSSI_LENGHT 11
+#define PPRZ_SENDER_ID 1
+#define PPRZ_MSG_ID 28
+
+/*
+ * <message name="RSSI" id="28">
+    <field name="rssi" type="uint8" unit="dB"/>
+    <field name="tx_power" type="uint8" unit="dB"/>
+  </message>
+
+  PPRZ-message: ABCxxxxxxxDE
+  1  A PPRZ_STX (0x99)
+  2  B LENGTH (A->E)
+  3  C SENDER_ID
+  4  D MSG_ID
+  5  E ac rssi (remote)
+  6	 F tx_power
+  7    gcs_rssi (local)
+  8		gcs_noise (local)
+  9    ac noise (remote)
+  10  D PPRZ_CHECKSUM_A (sum[B->C])
+  11  E PPRZ_CHECKSUM_B (sum[ck_a])
+
+
+<message name="RSSI" id="28">
+  <field name="rssi" type="uint8" unit="dB"/>
+  <field name="tx_power" type="uint8" unit="dB"/>
+  <field name="gcs_rssi" type="uint8" unit="dB"/>
+  <field name="gcs_noise" type="uint8" unit="dB"/>
+  <field name="ac_noise" type="uint8" unit="dB"/>
+</message>
+*/
+
+extern __pdata struct radio_settings settings;
+
 /// send a MAVLink status report packet
 /// we always send as MAVLink1 and let the recipient sort it out.
 void MAVLink_report(void)
 {
-	struct mavlink_RADIO_v10 *m = (struct mavlink_RADIO_v10 *)&pbuf[6];
-	pbuf[0] = MAVLINK10_STX;
-	pbuf[1] = sizeof(struct mavlink_RADIO_v10);
-	pbuf[2] = seqnum++;
-	pbuf[3] = RADIO_SOURCE_SYSTEM;
-	pbuf[4] = RADIO_SOURCE_COMPONENT;
-	pbuf[5] = MAVLINK_MSG_ID_RADIO_STATUS;
+	uint8_t ck_a_tx = 0;
+	uint8_t ck_b_tx = 0;
 
-        m->rxerrors = errors.rx_errors;
-        m->fixed    = errors.corrected_packets;
-        m->txbuf    = serial_read_space();
-        m->rssi     = statistics.average_rssi;
-        m->remrssi  = remote_statistics.average_rssi;
-        m->noise    = statistics.average_noise;
-        m->remnoise = remote_statistics.average_noise;
-	mavlink_crc(MAVLINK_RADIO_STATUS_CRC_EXTRA);
+	pbuf[0] = PPRZ_STX;
+	pbuf[1] = PPRZ_RSSI_LENGHT;
+	ck_a_tx += pbuf[1];
+	ck_b_tx += ck_a_tx;
 
+
+	pbuf[2] = settings.rx_ac_id;// from received messages
+	ck_a_tx += pbuf[2];
+	ck_b_tx += ck_a_tx;
+
+	pbuf[3] = PPRZ_MSG_ID;
+	ck_a_tx += pbuf[3];
+	ck_b_tx += ck_a_tx;
+
+	pbuf[4] = remote_statistics.average_rssi; // ac rssi
+	ck_a_tx += pbuf[4];
+	ck_b_tx += ck_a_tx;
+
+	pbuf[5] = settings.transmit_power; // tx power
+	ck_a_tx += pbuf[5];
+	ck_b_tx += ck_a_tx;
+
+	pbuf[6] = statistics.average_rssi; // gcs rssi
+	ck_a_tx += pbuf[6];
+	ck_b_tx += ck_a_tx;
+
+	pbuf[7] = statistics.average_noise; // gcs noise
+	ck_a_tx += pbuf[7];
+	ck_b_tx += ck_a_tx;
+
+	pbuf[8] = remote_statistics.average_noise; // ac noise
+	ck_a_tx += pbuf[8];
+	ck_b_tx += ck_a_tx;
+
+
+	pbuf[9] = ck_a_tx;
+	pbuf[10] = ck_b_tx;
+
+	if (serial_write_space() < PPRZ_RSSI_LENGHT) {
+		// don't cause an overflow
+		return;
+	}
+
+	serial_write_buf(pbuf, PPRZ_RSSI_LENGHT);
+
+	/*
 	if (serial_write_space() < sizeof(struct mavlink_RADIO_v10)+8) {
 		// don't cause an overflow
 		return;
 	}
 
 	serial_write_buf(pbuf, sizeof(struct mavlink_RADIO_v10)+8);
+	*/
 }
